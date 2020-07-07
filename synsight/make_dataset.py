@@ -86,7 +86,6 @@ def main(flags):
     in_root = getattr(flags, 'in')
     splits = flags.splits.split(',')
     samples = collect_files(in_root, splits)
-    samples = samples[:10000]
 
     shape_filter = ShapeFilter(flags.h_min, flags.h_max, flags.w_min,
                                flags.w_max, flags.ar_max)

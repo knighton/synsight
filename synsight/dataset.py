@@ -11,7 +11,7 @@ def run_len_encode(x):
     return pos, run
 
 
-class Source(object):
+class Dataset(object):
     def __init__(self, samples, side, val_frac, batch_size, device):
         bytes_per_sample = 3 * side * side + 4
         samples = samples.reshape(-1, bytes_per_sample)

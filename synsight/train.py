@@ -5,7 +5,7 @@ import torch
 from torch.optim import Adam
 
 from .model import Encoder
-from .source import Source
+from .dataset import Dataset
 
 
 def parse_flags():
@@ -51,13 +51,13 @@ def main(flags):
     print('Dataset to RAM: %.3f sec' % t)
 
     t0 = time()
-    source = Source(samples, flags.size, flags.val_frac, flags.batch_size,
-                    device)
+    dataset = Dataset(samples, flags.size, flags.val_frac, flags.batch_size,
+                      device)
     t = time() - t0
-    print('Init source: %.3f sec' % t)
+    print('Init dataset: %.3f sec' % t)
 
     t0 = time()
-    encoder = Encoder(source.x.shape[1], flags.body_channels, flags.embed_dim)
+    encoder = Encoder(dataset.x.shape[1], flags.body_channels, flags.embed_dim)
     encoder.to(device)
     optimizer = Adam(encoder.parameters())
     t = time() - t0
@@ -70,7 +70,7 @@ def main(flags):
             encoder.train()
             for train_id in range(flags.train_per_round):
                 optimizer.zero_grad()
-                x = source(True)
+                x = dataset(True)
                 n, triple, c, h, w = x.shape
                 x_flat = x.view(-1, c, h, w)
                 y_flat = encoder(x_flat)
@@ -82,7 +82,7 @@ def main(flags):
             encoder.eval()
             with torch.no_grad():
                 for test_id in range(flags.test_per_round):
-                    x = source(False)
+                    x = dataset(False)
                     n, triple, c, h, w = x.shape
                     x_flat = x.view(-1, c, h, w)
                     y_flat = encoder(x_flat)

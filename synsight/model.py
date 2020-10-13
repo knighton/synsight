@@ -1,87 +1,79 @@
-import torch
 from torch import nn
-from torch.nn import Parameter as P
+
+from .layer import Append, Conv, ConvGrow, ConvShrink, Dense
 
 
-class Reshape(nn.Module):
-    def __init__(self, *shape):
-        super().__init__()
-        self.shape = shape
-
-    def forward(self, x):
-        shape = (x.shape[0],) + self.shape
-        return x.view(*shape)
-
-
-class Flatten(Reshape):
-    def __init__(self):
-        super().__init__(-1)
-
-
-class Conv2dBlock(nn.Sequential):
-    def __init__(self, in_c, out_c, face=3, stride=1, pad=1):
+class ImageToVector(nn.Sequential):
+    def __init__(self, in_channels, mid_channels, out_dim):
+        c = mid_channels
         super().__init__(
-            nn.ReLU(),
-            nn.Conv2d(in_c, out_c, face, stride, pad),
-            nn.BatchNorm2d(out_c),
-        )
-
-
-class LinearBlock(nn.Sequential):
-    def __init__(self, in_d, out_d):
-        super().__init__(
+            nn.Conv2d(in_channels, c, 3, 1, 1),
+            nn.BatchNorm2d(c),
+            ConvShrink(c, c),  # 64 to 32.
+            ConvShrink(c, c),  # 32 to 16.
+            ConvShrink(c, c),  # 16 to 8.
+            ConvShrink(c, c),  # 8 to 4.
+            ConvShrink(c, c),  # 4 to 2.
+            Flatten(),
+            Dense(c * 4, c),
             nn.ReLU(),
             nn.Dropout(),
-            nn.Linear(in_d, out_d),
-            nn.BatchNorm1d(out_d),
+            nn.Lineaar(c, out_dim),
         )
 
 
-class Skip(nn.Module):
-    def __init__(self, *path):
-        super().__init__()
-        self.path = nn.Sequential(*path)
-        self.gate = P(torch.Tensor([-2]))
-
-    def forward(self, x):
-        g = self.gate.sigmoid()
-        y = self.path(x)
-        return (1 - g) * x + g * y
-
-
-class Encoder(nn.Sequential):
-    def __init__(self, in_channels, body_channels, out_dim):
-        c = body_channels
-        d = c * 9
+class ImageToImage(nn.Sequential):
+    def __init__(self, in_channels, mid_channels, out_channels):
+        c = mid_channels
         super().__init__(
-            # 64 to 32.
-            nn.Conv2d(in_channels, c // 2, 3, 1, 1),
-            nn.BatchNorm2d(c // 2),
-            Conv2dBlock(c // 2, c, stride=2),
-
-            # 32 to 16.
-            Conv2dBlock(c, c, stride=2),
-
-            # 16 to 8.
-            Conv2dBlock(c, c, stride=2),
-
-            # 8 to 4.
-            Skip(
-                Conv2dBlock(c, c, stride=1),
+            Append(
+                ConvShrink(in_channels, c),  # 64 to 32.
+                Append(
+                    ConvShrink(c, c),  # 32 to 16.
+                    Append(
+                        ConvShrink(c, c),  # 16 to 8.
+                        Append(
+                            ConvShrink(c, c),  # 8 to 4.
+                            Append(
+                                ConvShrink(c, c),  # 4 to 2.
+                                Conv(c, c),
+                                ConvGrow(c, c),  # 2 to 4.
+                            ),
+                            ConvGrow(c + c, c),  # 4 to 8.
+                        ),
+                        ConvGrow(c + c, c),  # 8 to 16.
+                    ),
+                    ConvGrow(c + c, c),  # 16 to 32.
+                ),
+                ConvGrow(c + c, c),  # 32 to 64.
             ),
-            Conv2dBlock(c, c, stride=2),
-
-            # 4 to 2.
-            #Skip(
-            #    Conv2dBlock(c, c, stride=1),
-            #),
-            #Conv2dBlock(c, c, stride=2),
-
-            # Dense.
-            Flatten(),
-            Skip(
-                LinearBlock(d, d),
-            ),
-            nn.Linear(d, out_dim),
-            nn.Sigmoid(),
+            nn.ReLU(),
+            nn.Conv2d(in_channels + c, out_channels),
         )
+
+
+class FaceRecognizer(ImageToVector):
+    def __init__(self, img_channels, vec_dim, mid_channels=64):
+        super().__init__(img_channels, mid_channels, vec_dim)
+
+
+class FaceMasker(ImageToImage):
+    def __init__(self, img_channels, mid_channels=64):
+        super().__init__(img_channels, mid_channels, 1)
+
+
+class FaceSwatcher(nn.Module):
+    def __init__(self, img_channels, vec_dim, mid_channels=64):
+        super().__init__()
+        self.path = ImageToImage(img_channels + vec_dim, mid_channels,
+                                 img_channels)
+
+    def forward(self, vec, img):
+        vec = vec.unsqueeze(2).unsqueeze(3)
+        x = torch([img, vec], 1)
+        return self.path(x)
+
+
+class SwatchRecognizer(ImageToVector):
+    def __init__(self, img_channels, vec_dim, mid_channels=64):
+        super().__init__(img_channels, mid_channels, vec_dim)

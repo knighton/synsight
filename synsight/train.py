@@ -4,7 +4,7 @@ from time import time
 import torch
 from torch.optim import Adam
 
-from .model import Encoder
+from .model import FaceRecognizer
 from .dataset import Dataset
 
 
@@ -57,11 +57,12 @@ def main(flags):
     print('Init dataset: %.3f sec' % t)
 
     t0 = time()
-    encoder = Encoder(dataset.x.shape[1], flags.body_channels, flags.embed_dim)
+    encoder = FaceRecognizer(dataset.x.shape[1], flags.body_channels,
+                             flags.embed_dim)
     encoder.to(device)
     optimizer = Adam(encoder.parameters())
     t = time() - t0
-    print('Init models: %.3f sec' % t) 
+    print('Init models: %.3f sec' % t)
 
     for epoch_id in range(flags.num_epochs):
         t_losses = []
